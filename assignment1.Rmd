@@ -1,0 +1,255 @@
+---
+title: 'EDS 223: assignment 1'
+author: "Luna Herschenfeld-Catalan"
+output: html_document
+date: "2023-10-03"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+In this assignment we'll explore making maps in R! To do so, we will be visualizing environmental inequities within the United States.
+
+We will be working with data from the United States Environmental Protection Agency's EJScreen: Environmental Justice Screening and Mapping Tool.
+
+According to the [US EPA website](https://www.epa.gov/ejscreen/purposes-and-uses-ejscreen):
+
+> This screening tool and data may be of interest to community residents or other stakeholders as they search for environmental or demographic information. It can also support a wide range of research and policy goals. The public has used EJScreen in many different locations and in many different ways.
+>
+> EPA is sharing EJScreen with the public:\
+> - to be more transparent about how we consider environmental justice in our work,\
+> - to assist our stakeholders in making informed decisions about pursuing environmental justice and,\
+> - to create a common starting point between the agency and the public when looking at issues related to environmental justice.
+
+EJScreen provides on environmental and demographic information for the US at the Census [tract](https://en.wikipedia.org/wiki/Census_tract) and [block group](https://en.wikipedia.org/wiki/Census_block_group) levels. You will be working with block group data that has been downloaded from the [EPA site](https://www.epa.gov/ejscreen/download-ejscreen-data). To understand the associated data columns, you will need to explore the Technical Documentation and column description spreadsheet available in the data folder. I also encourage you to explore the [limitations and caveats](https://www.epa.gov/ejscreen/limitations-and-caveats-using-ejscreen) of the data.
+
+## Assignment
+
+Your task is to explore a question or problem of your choosing. You should focus on region(s), communities, or environmental hazards that interest you.
+
+Please write a short paragraph describing the environmental question you would like to explore through visualization. Create 3 distinct maps of your choice that support this exploration. Because breaking the rules can be a fun way to learn them, please make the ugliest map you can imagine that breaks all the rules!
+
+Please incorporate the following elements into at least **one map**:
+
+-   categorical color display
+-   continuous color display
+-   custom binned color legend
+-   graticules
+-   scale bar
+-   compass rose
+-   interactive map
+-   inset map
+-   updated color palette
+-   display two datasets in one map
+
+**All maps** should include the following:
+
+-   legend with legible (updated) title
+-   legible colorscale
+-   indication of scale and orientation
+
+### Grading
+
+Assignment 1 is worth 15% of your final grade. Full credit will be given to responses that address all requirements listed above. Partial credit will be given based on the proportion of requirements. The short paragraph is worth 20% of the assignment grade. Maps are worth 80% of the assignment grade.
+
+# My question 
+
+I wanted to explore the factors involved in regions with low life expectancy, to see if there were EJ factors that corresponded with this trend. After googling, I discovered that West Virginia had one of the lowest life expectancy in the US. After exploring the columns in this dataset, I recognized that many of the factors of interest were things that could be impacted by changes in regulation, including waste water, air pollution, or lead. I was also interested in seeing if low life expectancy was consistent across WV, or if there were areas or communities that were contributing disproportionately to this trend. 
+
+# Step 1: Read in the Data
+
+```{r}
+# load libraries
+library(tidyverse)
+library(sf)
+library(here)
+library(janitor)
+library(readxl)
+library(maps)
+library(patchwork)
+library(ggspatial)
+library(tmap)
+library(cowplot)
+
+```
+
+```{r include=TRUE, eval=FALSE}
+
+# read in geodatabase of EJScreen data at the Census Block Group level
+ejscreen <- st_read("/Users/lunacatalan/Documents/dev/eds223/assignments/assignment-1-lunacatalan/data/EJSCREEN_2023_BG_StatePct_with_AS_CNMI_GU_VI.gdb") %>% 
+  clean_names()
+
+column_data <- read_excel("/Users/lunacatalan/Documents/dev/eds223/assignments/assignment-1-lunacatalan/data/EJSCREEN_2023_BG_Columns.xlsx", skip = 1)
+
+```
+# Cleaning and Preparing Data on West Virginia 
+
+```{r warning = FALSE}
+summary(ejscreen$lowincpct, na.rm = TRUE)
+
+# choosing data from West Virginia
+wv <- ejscreen %>% 
+  filter(st_abbrev == "WV") %>% 
+  rename(dem_index = demogidx_2,
+         sup_dem_index = demogidx_5,
+         county = cnty_name)
+
+
+# find the average values for all variables within counties
+wv_counties <- aggregate(wv, 
+                         by = list(wv$county),
+                         FUN = mean, na.rm = TRUE)
+
+# for all the borders 
+wv_blockgroup_centroids <- st_centroid(wv)
+
+# find the centroid within each Census Block Group
+# this is helpful so you can plot Census Block Group data as points
+county_blockgroup_centroids <- st_centroid(wv_counties)
+
+```
+
+## Map 1 showing the percent of low income people in each county
+
+lease incorporate the following elements into at least **one map**:
+
+-   categorical color display ##
+-   continuous color display ##
+-   custom binned color legend ##
+-   graticules ##
+-   scale bar ##
+-   compass rose ##
+-   interactive map ##
+-   inset map ##
+-   updated color palette ##
+-   display two datasets in one map ##
+
+**All maps** should include the following:
+
+-   legend with legible (updated) title
+-   legible colorscale
+-   indication of scale and orientation
+
+```{r warning = FALSE}
+# ggplot of west virginia and life expectancy by county
+life_exp <- ggplot(data = wv_counties) + # map of west virginia
+  geom_sf() +
+  geom_sf(data = county_blockgroup_centroids,
+          aes(color = lifeexppct), 
+          size = 3) + # plot the middle of the counties
+  paletteer::scale_color_paletteer_c("pals::kovesi.linear_kryw_5_100_c67",
+                                     trans='reverse') +
+  labs(color = "Life Expectancy") # edit the legend
+
+```
+
+
+
+```{r}
+
+wastewater <- tm_shape(wv_counties) +
+  tm_polygons(fill = 'd5_pwdis', # Hazardous waste proximity EJ Index
+              n = 4) + # decide breaks
+  tm_graticules() + # add loong and lat lines
+  tm_layout(
+    inner.margins = c(.3, .3, 0, 0),
+    frame = FALSE
+  ) +
+  tm_dots(
+    col = "lowincpct",
+    palette = "Dark2", # customize color bins for low inc
+    size = 0.5,
+    breaks = c(0.0000, 0.1350, 0.2676, 0.4432, 1.0000)) # customize legend bins based on quartiles
+
+wastewater
+```
+
+```{r}
+
+summary(wv$d5_pwdis)
+
+main <- ggplot(wv) +
+  geom_sf(aes(fill = d5_pwdis)) + # Wastewater discharge Supplemental Index
+  paletteer::scale_fill_paletteer_c("grDevices::Oslo")
+
+main_2 <- ggplot(wv_counties) +
+  geom_sf(aes(fill = d5_pwdis)) + # Wastewater discharge Supplemental Index
+  paletteer::scale_fill_paletteer_c("grDevices::Oslo") +
+  labs(title = "Distribution of Wastewater Discharge across West Virginia",
+       fill = "Wastewater Discharge (Supp Index)")
+
+main_2
+          
+          
+
+
+```
+
+```{r}
+# preapring data for just mcdowell county
+wastewater_mcdowell <- wv %>% 
+  filter(county == "McDowell County")
+
+mc_waste <- ggplot() +
+  geom_sf(data = wastewater_mcdowell,
+          aes(fill = d5_pwdis))
+
+mc_waste
+```
+
+```{r}
+# make inset map for ggplot 
+ggdraw(main_2) + # use map of waste by county
+  draw_plot(
+    {
+      mc_waste + # use inset map of just mcdowell county
+        coord_sf(
+          xlim = st_bbox(wastewater_mcdowell)[c(1,3)], # from sf package
+          ylim = st_bbox(wastewater_mcdowell)[c(2,4)],
+          expand = FALSE
+    ) +
+        theme(legend.position = "none",
+              axis.ticks = element_blank(),
+              axis.text = element_blank())
+      },
+    # The distance along a (0,1) x-axis to draw the left edge of the plot
+    x = 0.58, 
+    # The distance along a (0,1) y-axis to draw the bottom edge of the plot
+    y = 0,
+    # The width and height of the plot expressed as proportion of the entire ggdraw object
+    width = 0.3, 
+    height = 0.3
+  ) +
+  annotation_scale(plot_unit = "km",
+                   location = "bl") + # edit units of scale bar - may auto fill
+  annotation_north_arrow(location = "tr",
+                         style = ggspatial::north_arrow_minimal(),
+                         pad_x = unit(0.2, "in"),
+                         pad_y = unit(0.2, "in"))
+```
+
+
+```{r}
+mcdowell_blockgroup_centroids <- st_centroid(wastewater_mcdowell)
+
+mcdowell <- tm_shape(wastewater_mcdowell) +
+  tm_polygons(fill = "d5_pwdis") +
+  tm_dots(
+    col = "lowincpct",
+    palette = "Dark2",
+    size = 0.5,
+    breaks = c(0.0000, 0.1350, 0.2676, 0.4432, 1.0000)) # customize legend bins based on quadrtile
+
+mcdowell
+
+```
+
+```{r}
+# interactive map
+tmap_mode("view") +
+hazardous_waste
+```
+
